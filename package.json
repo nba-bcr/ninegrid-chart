@@ -1,0 +1,56 @@
+{
+  "name": "ninegrid-chart",
+  "version": "0.1.0",
+  "description": "A 9x9 nested-grid React chart. Feed it flat rows, get a two-level hierarchy laid out in the goal-sheet format popularised by Shohei Ohtani.",
+  "type": "module",
+  "main": "./dist/ninegrid-chart.cjs",
+  "module": "./dist/ninegrid-chart.js",
+  "exports": {
+    ".": {
+      "import": "./dist/ninegrid-chart.js",
+      "require": "./dist/ninegrid-chart.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:demo": "vite build --config vite.demo.config.js",
+    "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.7"
+  },
+  "keywords": [
+    "react",
+    "chart",
+    "dataviz",
+    "visualization",
+    "grid",
+    "hierarchy",
+    "okr",
+    "goal-setting",
+    "mandala"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nba-bcr/ninegrid-chart.git"
+  },
+  "homepage": "https://github.com/nba-bcr/ninegrid-chart#readme",
+  "bugs": {
+    "url": "https://github.com/nba-bcr/ninegrid-chart/issues"
+  }
+}
