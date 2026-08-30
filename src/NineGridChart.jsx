@@ -342,7 +342,15 @@ export function NineGridChart({
                     format={format}
                     onEnter={handleEnter}
                     onLeave={handleLeave}
-                    onClick={onCellClick}
+                    onClick={
+                      onCellClick
+                        ? (n, l) =>
+                            onCellClick(n, l, {
+                              group: block.group ? block.group.name : null,
+                              isOtherGroup: Boolean(block.group?.isOther),
+                            })
+                        : null
+                    }
                   />
                 );
               })}

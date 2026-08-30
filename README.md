@@ -134,7 +134,7 @@ const rows = [
 | `metricLabels` | `object` | `{}` | ツールチップに出す指標 `{ キー: 表示名 }` |
 | `levelLabels` | `object` | `{}` | 階層名の表示 `{ group: "…", item: "…" }` |
 | `format` | `(n) => string` | `toLocaleString` | 値の書式 |
-| `onCellClick` | `(node, level) => void \| null` | `null` | セルクリック時のコールバック |
+| `onCellClick` | `(node, level, context) => void \| null` | `null` | セルクリック時のコールバック。`context.group` はクリックしたセルが属するブロックのグループ名（中心ブロックなら `null`）、`context.isOtherGroup` は「その他」ブロックかどうか |
 | `minWidth` | `number` | `560` | 最小幅（下回ると横スクロール） |
 
 ### `otherStrategy` の使い分け
