@@ -18,7 +18,7 @@ function shade(t, hue) {
 /* ------------------------------------------------------------------ *
  * セル
  * ------------------------------------------------------------------ */
-function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick }) {
+function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick, dense }) {
   if (!node) {
     return (
       <div
@@ -77,7 +77,7 @@ function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick }
     >
       <span
         style={{
-          fontSize: level === "item" ? 10 : 11,
+          fontSize: dense ? 8 : level === "item" ? 10 : 11,
           fontWeight: level === "item" ? 400 : 600,
           lineHeight: 1.2,
           textAlign: "center",
@@ -90,11 +90,17 @@ function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick }
       >
         {node.name}
       </span>
-      <span
-        style={{ fontSize: 9.5, opacity: 0.78, fontVariantNumeric: "tabular-nums" }}
-      >
-        {format(node.value)}
-      </span>
+      {(!dense || isTotal) && (
+        <span
+          style={{
+            fontSize: dense ? 8 : 9.5,
+            opacity: 0.78,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {format(node.value)}
+        </span>
+      )}
     </div>
   );
 }
@@ -253,8 +259,11 @@ export function NineGridChart({
   groupKey = "group",
   itemKey = "item",
   valueKey = "value",
-  maxGroups = 8,
+  blockGrid = 3,
+  maxGroups,
   maxItems = 8,
+  highlightGroups = null,
+  centerOverride = null,
   otherLabel = "その他",
   otherStrategy = "merge",
   centerLabel = "総計",
@@ -271,21 +280,27 @@ export function NineGridChart({
   const [hovered, setHovered] = useState(null);
   const wrapRef = useRef(null);
 
+  // 既定のブロック数はブロックの並びに追随する（3×3 → 8、5×5 → 24）
+  const groupCap = maxGroups ?? blockGrid * blockGrid - 1;
+
   const model = useMemo(
     () =>
       aggregate(data, {
         groupKey,
         itemKey,
         valueKey,
-        maxGroups,
+        maxGroups: groupCap,
         maxItems,
         otherLabel,
         otherStrategy,
       }),
-    [data, groupKey, itemKey, valueKey, maxGroups, maxItems, otherLabel, otherStrategy]
+    [data, groupKey, itemKey, valueKey, groupCap, maxItems, otherLabel, otherStrategy]
   );
 
-  const blocks = useMemo(() => layout(model, centerLabel), [model, centerLabel]);
+  const blocks = useMemo(
+    () => layout(model, centerLabel, { blockGrid, centerOverride }),
+    [model, centerLabel, blockGrid, centerOverride]
+  );
 
   // 強度の分母。item と group で別スケールにしないと外周が真っ白になる。
   const maxItemValue = useMemo(
@@ -322,17 +337,30 @@ export function NineGridChart({
   return (
     <div ref={wrapRef} style={{ position: "relative", minWidth }}>
       <div
-        style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 11 }}
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${blockGrid}, 1fr)`,
+          gap: blockGrid > 3 ? 7 : 11,
+        }}
       >
         {blocks.map((block, bi) => {
           if (!block) return <div key={bi} />;
+          // 中心ブロックは blockGrid×blockGrid、外周ブロックは 3×3
+          const cols = Math.round(Math.sqrt(block.cells.length));
+          const dense = block.cells.length > 9;
+          const highlighted = Boolean(
+            highlightGroups && block.group && highlightGroups.includes(block.group.name)
+          );
           return (
             <div
               key={bi}
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 3,
+                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gap: dense ? 2 : 3,
+                outline: highlighted ? `2px solid hsl(${hue} 55% 40%)` : "none",
+                outlineOffset: 2,
+                borderRadius: 4,
               }}
             >
               {block.cells.map((node, ci) => {
@@ -348,6 +376,7 @@ export function NineGridChart({
                     intensity={intensity}
                     hue={hue}
                     format={format}
+                    dense={dense}
                     onEnter={handleEnter}
                     onLeave={handleLeave}
                     onClick={

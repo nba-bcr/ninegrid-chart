@@ -122,8 +122,11 @@ const rows = [
 | `groupKey` | `string` | `"group"` | 第1階層のキー |
 | `itemKey` | `string` | `"item"` | 第2階層のキー |
 | `valueKey` | `string` | `"value"` | 大きさを決める数値キー |
-| `maxGroups` | `number` | `8` | ブロック数の上限（1–8） |
+| `blockGrid` | `number` | `3` | ブロックの並び（n×n）。`5` にすると25ブロック（外周24グループ + 中心5×5サマリ）の俯瞰表示になる |
+| `maxGroups` | `number` | `blockGrid²−1` | ブロック数の上限 |
 | `maxItems` | `number` | `8` | ブロック内セル数の上限（1–8） |
+| `highlightGroups` | `string[] \| null` | `null` | 名前が一致するブロックを枠線で強調（選択UIの実装用） |
+| `centerOverride` | `object \| null` | `null` | 中心セル（総計）に上書きするフィールド。一部グループだけ描画しつつ全体KPIを見せたい場合に `{ value, metrics }` を渡す |
 | `otherLabel` | `string` | `"その他"` | 畳んだノードのラベル |
 | `otherStrategy` | `"merge"\|"drop"\|"none"` | `"merge"` | 上限を超えた分の扱い |
 | `centerLabel` | `string` | `"総計"` | 中心セルのラベル |

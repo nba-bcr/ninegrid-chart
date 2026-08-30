@@ -4,8 +4,17 @@
  * Vue 版を作るときも移植の単位がはっきりする。
  */
 
-/** 中心(index 4)を除いた配置順。上位から左上→右下の読み順で埋まる。 */
-export const RING = [0, 1, 2, 3, 5, 6, 7, 8];
+/**
+ * n×n グリッドの中心を除いた配置順を返す。
+ * 上位から左上→右下の読み順で埋まる（中心は飛ばす）。
+ */
+export function ringOrder(size) {
+  const mid = (size * size - 1) / 2;
+  return Array.from({ length: size * size }, (_, i) => i).filter((i) => i !== mid);
+}
+
+/** 3×3 の配置順。後方互換のため定数としても公開している。 */
+export const RING = ringOrder(3);
 
 /**
  * row の数値フィールドを target に加算する。
@@ -154,16 +163,28 @@ export function aggregate(data, options) {
 }
 
 /**
- * 集計結果を 9 ブロック × 9 セルの描画用モデルに変換する。
+ * 集計結果をブロック × セルの描画用モデルに変換する。
  * 「集計」と「配置」を分けておくと、将来 mode="edit"（手入力）を
  * 足すときにこの関数の出力形式にだけ合わせればよくなる。
+ *
+ * @param {object} model  aggregate() の戻り値
+ * @param {string} centerLabel  中心セルのラベル
+ * @param {object} [opts]
+ * @param {number} [opts.blockGrid=3]  ブロックの並び（n×n）。3 なら従来の 9 ブロック、
+ *   5 なら 25 ブロック（外周24グループ）。中心ブロックのセル数も n×n になる
+ * @param {object} [opts.centerOverride]  中心セル（総計）に上書きするフィールド。
+ *   例: 一部グループだけ描画しつつ、KPI は全体の総計を見せたい場合に
+ *   { value, metrics } を渡す
  */
-export function layout({ groups, total, totalMetrics }, centerLabel) {
-  const blocks = new Array(9).fill(null);
+export function layout({ groups, total, totalMetrics }, centerLabel, opts = {}) {
+  const { blockGrid = 3, centerOverride = null } = opts;
+  const blockRing = ringOrder(blockGrid);
+  const mid = (blockGrid * blockGrid - 1) / 2;
+  const blocks = new Array(blockGrid * blockGrid).fill(null);
 
-  // 外周8ブロック: 各 group の内訳
+  // 外周ブロック: 各 group の内訳（ブロック内は常に 3×3 = 上位8アイテム）
   groups.forEach((group, rank) => {
-    if (rank >= RING.length) return;
+    if (rank >= blockRing.length) return;
     const cells = new Array(9).fill(null);
     const levels = new Array(9).fill("item");
 
@@ -178,19 +199,24 @@ export function layout({ groups, total, totalMetrics }, centerLabel) {
     };
     levels[4] = "group";
 
-    blocks[RING[rank]] = { cells, levels, group };
+    blocks[blockRing[rank]] = { cells, levels, group };
   });
 
-  // 中心ブロック: group のサマリ + 総計
-  const centerCells = new Array(9).fill(null);
-  const centerLevels = new Array(9).fill("group");
+  // 中心ブロック: group のサマリ + 総計。外周と同じ並び順で n×n に配置する
+  const centerCells = new Array(blockGrid * blockGrid).fill(null);
+  const centerLevels = new Array(blockGrid * blockGrid).fill("group");
   groups.forEach((group, rank) => {
-    if (rank < RING.length) centerCells[RING[rank]] = group;
+    if (rank < blockRing.length) centerCells[blockRing[rank]] = group;
   });
-  centerCells[4] = { name: centerLabel, value: total, metrics: totalMetrics };
-  centerLevels[4] = "total";
+  centerCells[mid] = {
+    name: centerLabel,
+    value: total,
+    metrics: totalMetrics,
+    ...(centerOverride || {}),
+  };
+  centerLevels[mid] = "total";
 
-  blocks[4] = { cells: centerCells, levels: centerLevels, group: null };
+  blocks[mid] = { cells: centerCells, levels: centerLevels, group: null };
 
   return blocks;
 }
