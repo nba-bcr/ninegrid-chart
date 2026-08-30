@@ -7,3 +7,4 @@ dist-demo/
 .env.local
 *.tgz
 demo-springs/
+demo-salon/

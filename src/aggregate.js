@@ -43,7 +43,7 @@ function mergeMetrics(target, source, skip) {
  *   "drop"  … 上位 limit 件だけ残し、残りは捨てる
  *   "none"  … 何もしない（limit を超えた分は描画時に切れる）
  */
-function applyLimit(list, limit, { otherLabel, strategy, skip }) {
+function applyLimit(list, limit, { otherLabel, strategy, skip, resort = true }) {
   if (strategy === "none" || list.length <= limit) return list;
   if (strategy === "drop") return list.slice(0, limit);
 
@@ -65,7 +65,10 @@ function applyLimit(list, limit, { otherLabel, strategy, skip }) {
     mergeMetrics(other.metrics, node.metrics, skip);
   }
 
-  return [...head, other].sort((a, b) => b.value - a.value);
+  const merged = [...head, other];
+  // 並びが値の降順のときだけ、畳んだノードを順位相当の位置へ差し込み直す。
+  // データ順を保つモード（sortGroups: "none"）では末尾に置いたままにする
+  return resort ? merged.sort((a, b) => b.value - a.value) : merged;
 }
 
 /** 同名ノードを1つにまとめ直す（「その他」ブロック内の再集計用）。 */
@@ -106,10 +109,15 @@ export function aggregate(data, options) {
     maxItems = 8,
     otherLabel = "その他",
     otherStrategy = "merge",
+    sortGroups = "value",
   } = options;
 
   const skip = new Set([groupKey, itemKey, valueKey]);
   const limitOpts = { otherLabel, strategy: otherStrategy, skip };
+  // sortGroups: "value"（既定）は値の降順、"none" はデータの出現順を保つ。
+  // 開店順・五十音順など、値以外の並びを使いたいときは行データを
+  // その順に並べてから "none" を指定する
+  const groupLimitOpts = { ...limitOpts, resort: sortGroups !== "none" };
 
   // --- 1. group -> item の 2 段で積む ---
   const byGroup = new Map();
@@ -144,8 +152,8 @@ export function aggregate(data, options) {
   });
 
   // --- 3. group 自体を上位に絞る ---
-  groups.sort((a, b) => b.value - a.value);
-  groups = applyLimit(groups, maxGroups, limitOpts);
+  if (sortGroups !== "none") groups.sort((a, b) => b.value - a.value);
+  groups = applyLimit(groups, maxGroups, groupLimitOpts);
 
   // --- 4. 「その他」ブロックは複数 group の子が混ざるので畳み直す ---
   for (const g of groups) {

@@ -129,6 +129,7 @@ const rows = [
 | `centerOverride` | `object \| null` | `null` | 中心セル（総計）に上書きするフィールド。一部グループだけ描画しつつ全体KPIを見せたい場合に `{ value, metrics }` を渡す |
 | `otherLabel` | `string` | `"その他"` | 畳んだノードのラベル |
 | `otherStrategy` | `"merge"\|"drop"\|"none"` | `"merge"` | 上限を超えた分の扱い |
+| `sortGroups` | `"value"\|"none"` | `"value"` | ブロックの並び順。`"none"` は行データの出現順を保つ（開店順・五十音順などで並べたいときは、行データをその順にしてから指定） |
 | `centerLabel` | `string` | `"総計"` | 中心セルのラベル |
 | `valueLabel` | `string` | `"値"` | ツールチップでの値の見出し |
 | `hue` | `number` | `258` | 色相（0–360）。彩度・明度は値から自動 |

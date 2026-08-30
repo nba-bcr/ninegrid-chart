@@ -266,6 +266,7 @@ export function NineGridChart({
   centerOverride = null,
   otherLabel = "その他",
   otherStrategy = "merge",
+  sortGroups = "value",
   centerLabel = "総計",
   valueLabel = "値",
   hue = 258,
@@ -293,8 +294,9 @@ export function NineGridChart({
         maxItems,
         otherLabel,
         otherStrategy,
+        sortGroups,
       }),
-    [data, groupKey, itemKey, valueKey, groupCap, maxItems, otherLabel, otherStrategy]
+    [data, groupKey, itemKey, valueKey, groupCap, maxItems, otherLabel, otherStrategy, sortGroups]
   );
 
   const blocks = useMemo(
