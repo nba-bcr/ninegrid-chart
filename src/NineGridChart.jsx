@@ -300,11 +300,19 @@ export function NineGridChart({
   const handleEnter = useCallback((node, level, e) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
+    // FocusEvent には clientX/clientY がないので、セルの中心にフォールバックする
+    let cx = e.clientX;
+    let cy = e.clientY;
+    if (typeof cx !== "number" || Number.isNaN(cx)) {
+      const cell = e.currentTarget.getBoundingClientRect();
+      cx = cell.left + cell.width / 2;
+      cy = cell.top + cell.height / 2;
+    }
     setHovered({
       node,
       level,
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+      x: cx - rect.left,
+      y: cy - rect.top,
       containerWidth: rect.width,
     });
   }, []);
