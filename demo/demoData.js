@@ -56,14 +56,45 @@ function seasonal(total, peakMonth) {
   return weights.map((w) => Math.round((w / sum) * total));
 }
 
+export const YEARS = ["2021年", "2022年", "2023年", "2024年", "2025年"];
+
+/** 品種名から決定的に「成長タイプ」を決める（乱数を使わない）。 */
+function trendOf(name) {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.codePointAt(0)) % 997;
+  return h % 4; // 0=横ばい 1=成長 2=減少 3=山なり
+}
+
+function yearFactor(trend, i, n) {
+  const t = i / (n - 1);
+  switch (trend) {
+    case 1: return 0.45 + 0.9 * t;                     // 成長
+    case 2: return 1.25 - 0.8 * t;                     // 減少
+    case 3: return 0.6 + 0.8 * Math.sin(Math.PI * t);  // 山なり
+    default: return 0.85 + 0.1 * Math.sin(t * 6.28);   // 横ばい
+  }
+}
+
+/**
+ * 行データは「タイプ × 品種 × 年」の粒度。
+ * チャートは year の列を無視してそのまま合算するので、この形のまま渡してよい。
+ * 品種ごとに成長・減少などの年次推移が付くので、クリックで開く年次比較が面白くなる。
+ */
 export const DEMO_ROWS = Object.entries(CATALOG).flatMap(([type, list]) =>
-  list.map(([variety, sales, peak]) => ({
-    fruitType: type,
-    variety,
-    sales: sales * 1000,
-    orders: Math.round(sales / 4.2),
-    monthly: seasonal(sales * 1000, peak),
-  }))
+  list.flatMap(([variety, sales, peak]) => {
+    const trend = trendOf(variety);
+    return YEARS.map((year, i) => {
+      const yearSales = Math.round(sales * 1000 * yearFactor(trend, i, YEARS.length));
+      return {
+        fruitType: type,
+        variety,
+        year,
+        sales: yearSales,
+        orders: Math.round(yearSales / 4200),
+        monthly: seasonal(yearSales, peak),
+      };
+    });
+  })
 );
 
 export const yen = (v) =>

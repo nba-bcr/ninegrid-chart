@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { NineGridChart } from "../src/index.js";
 import { DEMO_ROWS, MONTH_LABELS, yen } from "./demoData.js";
 
@@ -8,13 +8,48 @@ const STRATEGIES = [
   ["none", "そのまま"],
 ];
 
+const TOTAL_SELECTION = { types: null, variety: null, otherVarieties: false, label: "全社" };
+
 export default function App() {
   const [maxGroups, setMaxGroups] = useState(8);
   const [maxItems, setMaxItems] = useState(8);
   const [strategy, setStrategy] = useState("merge");
   const [hue, setHue] = useState(258);
+  const [selection, setSelection] = useState(TOTAL_SELECTION);
 
   const typeCount = new Set(DEMO_ROWS.map((r) => r.fruitType)).size;
+  const varietyCount = new Set(DEMO_ROWS.map((r) => r.variety)).size;
+
+  // チャートに表示されるタイプ（上位 maxGroups-1）の外＝「その他」ブロックの中身
+  const mergedTypes = useMemo(() => {
+    const totals = new Map();
+    for (const r of DEMO_ROWS) totals.set(r.fruitType, (totals.get(r.fruitType) || 0) + r.sales);
+    const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+    return sorted.slice(Math.max(0, maxGroups - 1));
+  }, [maxGroups]);
+
+  const handleCellClick = (node, level, context) => {
+    if (level === "total") {
+      setSelection(TOTAL_SELECTION);
+      return;
+    }
+    if (level === "group") {
+      setSelection(
+        node.isOther
+          ? { types: mergedTypes, variety: null, otherVarieties: false, label: `その他（${mergedTypes.length}タイプ）` }
+          : { types: [node.name], variety: null, otherVarieties: false, label: node.name }
+      );
+      return;
+    }
+    if (!context.group) return;
+    const types = context.isOtherGroup ? mergedTypes : [context.group];
+    const scopeLabel = context.isOtherGroup ? "その他" : context.group;
+    setSelection(
+      node.isOther
+        ? { types, variety: null, otherVarieties: true, label: `${scopeLabel} / その他` }
+        : { types, variety: node.name, otherVarieties: false, label: `${scopeLabel} / ${node.name}` }
+    );
+  };
 
   return (
     <div
@@ -49,9 +84,10 @@ export default function App() {
             lineHeight: 1.7,
           }}
         >
-          {typeCount}タイプ / {DEMO_ROWS.length}品種。売上上位から左上→右下の順に配置。
+          {typeCount}タイプ / {varietyCount}品種 × 5年分。売上上位から左上→右下の順に配置。
           中心ブロックがタイプ別サマリ、外周8ブロックが各タイプの品種内訳。
-          マスにカーソルを合わせると受注件数と月別の売れ方が出る。
+          マスにカーソルを合わせると受注件数と月別の売れ方、
+          <strong>クリックすると下に各年の月次比較</strong>が出る。
         </p>
 
         <div
@@ -109,8 +145,109 @@ export default function App() {
             levelLabels={{ group: "タイプ", item: "品種" }}
             format={yen}
             hue={hue}
+            onCellClick={handleCellClick}
           />
         </div>
+
+        <YearComparison selection={selection} maxItems={maxItems} hue={hue} />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * クリックした範囲（品種 / タイプ / 全社）の、年ごとの月次実績比較。
+ * ライブラリの機能ではなく、onCellClick を使ったデモ側の実装例。
+ * ------------------------------------------------------------------ */
+function YearComparison({ selection, maxItems, hue }) {
+  const yearly = useMemo(() => {
+    let scope =
+      selection.types === null
+        ? DEMO_ROWS
+        : DEMO_ROWS.filter((r) => selection.types.includes(r.fruitType));
+    if (selection.variety !== null) {
+      scope = scope.filter((r) => r.variety === selection.variety);
+    } else if (selection.otherVarieties) {
+      // ブロック内の「その他」セル: 表示中の上位品種（maxItems-1）以外を合算
+      const totals = new Map();
+      for (const r of scope) totals.set(r.variety, (totals.get(r.variety) || 0) + r.sales);
+      const top = new Set(
+        [...totals.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, Math.max(0, maxItems - 1))
+          .map(([v]) => v)
+      );
+      scope = scope.filter((r) => !top.has(r.variety));
+    }
+    const byYear = new Map();
+    for (const r of scope) {
+      if (!byYear.has(r.year)) byYear.set(r.year, new Array(12).fill(0));
+      const acc = byYear.get(r.year);
+      r.monthly.forEach((v, i) => (acc[i] += v));
+    }
+    return [...byYear.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, monthly]) => ({ year, monthly, total: monthly.reduce((s, v) => s + v, 0) }));
+  }, [selection, maxItems]);
+
+  const sharedMax = Math.max(1, ...yearly.flatMap((y) => y.monthly));
+
+  return (
+    <div style={{ marginTop: 20, borderTop: "1px solid hsl(40 8% 88%)", paddingTop: 14 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+        <h2 style={{ fontSize: 15, margin: 0 }}>{selection.label} — 各年の月次比較</h2>
+        <span style={{ fontSize: 11, color: "hsl(40 5% 55%)" }}>
+          全年共通スケール（最大月 {yen(sharedMax)}）／ マスをクリックで切り替え
+        </span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+        {yearly.map((y) => (
+          <YearBars key={y.year} {...y} sharedMax={sharedMax} hue={hue} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function YearBars({ year, monthly, total, sharedMax, hue }) {
+  const peak = monthly.indexOf(Math.max(...monthly));
+  return (
+    <div style={{ border: "1px solid hsl(40 8% 88%)", borderRadius: 6, padding: "8px 10px", background: "#fff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{year}</span>
+        <span style={{ fontSize: 11, color: "hsl(40 5% 52%)", fontVariantNumeric: "tabular-nums" }}>
+          {yen(total)}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 40 }}>
+        {monthly.map((v, i) => (
+          <div
+            key={i}
+            title={`${MONTH_LABELS[i]}月: ${yen(v)}`}
+            style={{
+              flex: 1,
+              height: `${Math.max(3, (v / sharedMax) * 100)}%`,
+              borderRadius: 1,
+              background: i === peak && v > 0 ? `hsl(${hue} 55% 48%)` : `hsl(${hue} 22% 78%)`,
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 2, marginTop: 3 }}>
+        {MONTH_LABELS.map((label, i) => (
+          <span
+            key={label}
+            style={{
+              flex: 1,
+              fontSize: 7,
+              textAlign: "center",
+              color: i === peak ? "hsl(40 6% 20%)" : "hsl(40 5% 68%)",
+              fontWeight: i === peak ? 600 : 400,
+            }}
+          >
+            {label}
+          </span>
+        ))}
       </div>
     </div>
   );
