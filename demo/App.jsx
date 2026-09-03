@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { NineGridChart, exportImage } from "../src/index.js";
-import { DEMO_ROWS, MONTH_LABELS, yen } from "./demoData.js";
+import { DEMO_ROWS, MONTH_LABELS, YEARS, yen } from "./demoData.js";
 
 const STRATEGIES = [
   ["merge", "その他にまとめる"],
@@ -11,28 +11,37 @@ const STRATEGIES = [
 const TOTAL_SELECTION = { types: null, variety: null, otherVarieties: false, label: "全社" };
 
 export default function App() {
-  const [maxGroups, setMaxGroups] = useState(8);
+  const [blockGrid, setBlockGrid] = useState(3);
+  const [selectedYears, setSelectedYears] = useState([...YEARS]);
   const [maxItems, setMaxItems] = useState(8);
   const [strategy, setStrategy] = useState("merge");
   const [hue, setHue] = useState(258);
   const [selection, setSelection] = useState(TOTAL_SELECTION);
   const chartRef = useRef(null);
 
+  const maxGroups = blockGrid * blockGrid - 1; // 3×3 → 8、5×5 → 24
+
   const saveAs = (format) =>
     exportImage(chartRef.current, { format, fileName: "ninegrid-chart" }).catch((e) =>
       alert("画像の書き出しに失敗しました: " + e.message)
     );
 
-  const typeCount = new Set(DEMO_ROWS.map((r) => r.fruitType)).size;
-  const varietyCount = new Set(DEMO_ROWS.map((r) => r.variety)).size;
+  // 年フィルター。チャートは year の列を無視して合算するので、絞った行をそのまま渡せる
+  const rows = useMemo(
+    () => DEMO_ROWS.filter((r) => selectedYears.includes(r.year)),
+    [selectedYears]
+  );
 
-  // チャートに表示されるタイプ（上位 maxGroups-1）の外＝「その他」ブロックの中身
+  const typeCount = new Set(rows.map((r) => r.fruitType)).size;
+  const varietyCount = new Set(rows.map((r) => r.variety)).size;
+
+  // 「その他」ブロックに畳まれるタイプ（上位 maxGroups-1 の外）
   const mergedTypes = useMemo(() => {
     const totals = new Map();
-    for (const r of DEMO_ROWS) totals.set(r.fruitType, (totals.get(r.fruitType) || 0) + r.sales);
+    for (const r of rows) totals.set(r.fruitType, (totals.get(r.fruitType) || 0) + r.sales);
     const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t);
     return sorted.slice(Math.max(0, maxGroups - 1));
-  }, [maxGroups]);
+  }, [rows, maxGroups]);
 
   const handleCellClick = (node, level, context) => {
     if (level === "total") {
@@ -57,6 +66,11 @@ export default function App() {
     );
   };
 
+  const yearLabel =
+    selectedYears.length === YEARS.length
+      ? "全期間"
+      : selectedYears.map((y) => y.replace("年", "")).join("・") + "年";
+
   return (
     <div
       style={{
@@ -68,7 +82,7 @@ export default function App() {
         color: "hsl(40 6% 16%)",
       }}
     >
-      <div style={{ maxWidth: 880, margin: "0 auto" }}>
+      <div style={{ maxWidth: blockGrid > 3 ? 1080 : 880, margin: "0 auto" }}>
         <div
           style={{
             fontSize: 10,
@@ -80,21 +94,23 @@ export default function App() {
           NINEGRID-CHART
         </div>
         <h1 style={{ fontSize: 26, fontWeight: 700, margin: "0 0 6px" }}>
-          果物タイプ別 売上構成
+          果物タイプ別 売上構成（{yearLabel}）
         </h1>
         <p
           style={{
             fontSize: 13,
             color: "hsl(40 5% 48%)",
-            margin: "0 0 24px",
+            margin: "0 0 20px",
             lineHeight: 1.7,
           }}
         >
-          {typeCount}タイプ / {varietyCount}品種 × 5年分。売上上位から左上→右下の順に配置。
-          中心ブロックがタイプ別サマリ、外周8ブロックが各タイプの品種内訳。
+          {typeCount}タイプ / {varietyCount}品種 × {YEARS.length}年分。売上上位から左上→右下の順に配置。
+          中心ブロックがタイプ別サマリ、外周ブロックが各タイプの品種内訳。
           マスにカーソルを合わせると受注件数と月別の売れ方、
           <strong>クリックすると下に各年の月次比較</strong>が出る。
         </p>
+
+        <YearFilter selectedYears={selectedYears} onChange={setSelectedYears} hue={hue} />
 
         <div
           style={{
@@ -110,7 +126,33 @@ export default function App() {
             fontSize: 12,
           }}
         >
-          <Slider label="タイプ数" value={maxGroups} onChange={setMaxGroups} min={1} max={8} hue={hue} />
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ color: "hsl(40 5% 48%)" }}>グリッド</span>
+            <span style={{ display: "flex", gap: 4 }}>
+              {[3, 5].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setBlockGrid(n)}
+                  style={{
+                    fontSize: 12,
+                    padding: "3px 12px",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    fontWeight: 600,
+                    border: `1px solid hsl(${hue} ${blockGrid === n ? "45% 45%" : "18% 82%"})`,
+                    background: blockGrid === n ? `hsl(${hue} 45% 48%)` : "#fff",
+                    color: blockGrid === n ? "#fff" : "hsl(40 5% 40%)",
+                  }}
+                >
+                  {n}×{n}
+                </button>
+              ))}
+            </span>
+            <span style={{ color: "hsl(40 5% 62%)", fontSize: 11 }}>
+              （最大{maxGroups}タイプ）
+            </span>
+          </label>
+
           <Slider label="品種数" value={maxItems} onChange={setMaxItems} min={1} max={8} hue={hue} />
           <Slider label="色相" value={hue} onChange={setHue} min={0} max={360} hue={hue} />
 
@@ -159,11 +201,11 @@ export default function App() {
 
         <div style={{ overflowX: "auto", paddingBottom: 8 }} ref={chartRef}>
           <NineGridChart
-            data={DEMO_ROWS}
+            data={rows}
             groupKey="fruitType"
             itemKey="variety"
             valueKey="sales"
-            maxGroups={maxGroups}
+            blockGrid={blockGrid}
             maxItems={maxItems}
             otherStrategy={strategy}
             centerLabel="全社売上"
@@ -174,6 +216,7 @@ export default function App() {
             levelLabels={{ group: "タイプ", item: "品種" }}
             format={yen}
             hue={hue}
+            minWidth={blockGrid > 3 ? 900 : 560}
             onCellClick={handleCellClick}
           />
         </div>
@@ -184,9 +227,46 @@ export default function App() {
   );
 }
 
+/* 年フィルターのチップ列 */
+function YearFilter({ selectedYears, onChange, hue }) {
+  const isAll = selectedYears.length === YEARS.length;
+
+  const chip = (active) => ({
+    fontSize: 12,
+    padding: "4px 12px",
+    borderRadius: 14,
+    border: active ? `1px solid hsl(${hue} 45% 45%)` : "1px solid hsl(40 8% 84%)",
+    background: active ? `hsl(${hue} 45% 48%)` : "#fff",
+    color: active ? "#fff" : "hsl(40 6% 35%)",
+    cursor: "pointer",
+  });
+
+  const toggle = (year) => {
+    const next = selectedYears.includes(year)
+      ? selectedYears.filter((y) => y !== year)
+      : [...selectedYears, year].sort();
+    if (next.length === 0) return; // 最低1年は残す
+    onChange(next);
+  };
+
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center", marginBottom: 14 }}>
+      <span style={{ fontSize: 12, color: "hsl(40 5% 48%)", marginRight: 4 }}>年</span>
+      <button style={chip(isAll)} onClick={() => onChange([...YEARS])}>全期間</button>
+      <span style={{ width: 1, height: 18, background: "hsl(40 8% 88%)", margin: "0 4px" }} />
+      {YEARS.map((year) => (
+        <button key={year} style={chip(selectedYears.includes(year))} onClick={() => toggle(year)}>
+          {year.replace("年", "")}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ *
  * クリックした範囲（品種 / タイプ / 全社）の、年ごとの月次実績比較。
  * ライブラリの機能ではなく、onCellClick を使ったデモ側の実装例。
+ * 年フィルターとは独立に「常に全年」を並べて比較できるようにしてある。
  * ------------------------------------------------------------------ */
 function YearComparison({ selection, maxItems, hue }) {
   const yearly = useMemo(() => {
@@ -197,7 +277,6 @@ function YearComparison({ selection, maxItems, hue }) {
     if (selection.variety !== null) {
       scope = scope.filter((r) => r.variety === selection.variety);
     } else if (selection.otherVarieties) {
-      // ブロック内の「その他」セル: 表示中の上位品種（maxItems-1）以外を合算
       const totals = new Map();
       for (const r of scope) totals.set(r.variety, (totals.get(r.variety) || 0) + r.sales);
       const top = new Set(
