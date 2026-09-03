@@ -1,6 +1,6 @@
 {
   "name": "ninegrid-chart",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A 9x9 nested-grid React chart. Feed it flat rows, get a two-level hierarchy laid out in the goal-sheet format popularised by Shohei Ohtani.",
   "type": "module",
   "main": "./dist/ninegrid-chart.cjs",

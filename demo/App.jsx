@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { NineGridChart } from "../src/index.js";
+import { useMemo, useRef, useState } from "react";
+import { NineGridChart, exportImage } from "../src/index.js";
 import { DEMO_ROWS, MONTH_LABELS, yen } from "./demoData.js";
 
 const STRATEGIES = [
@@ -16,6 +16,12 @@ export default function App() {
   const [strategy, setStrategy] = useState("merge");
   const [hue, setHue] = useState(258);
   const [selection, setSelection] = useState(TOTAL_SELECTION);
+  const chartRef = useRef(null);
+
+  const saveAs = (format) =>
+    exportImage(chartRef.current, { format, fileName: "ninegrid-chart" }).catch((e) =>
+      alert("画像の書き出しに失敗しました: " + e.message)
+    );
 
   const typeCount = new Set(DEMO_ROWS.map((r) => r.fruitType)).size;
   const varietyCount = new Set(DEMO_ROWS.map((r) => r.variety)).size;
@@ -126,9 +132,32 @@ export default function App() {
               ))}
             </select>
           </label>
+
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: "hsl(40 5% 48%)" }}>画像で保存</span>
+            {["png", "jpg", "svg"].map((format) => (
+              <button
+                key={format}
+                onClick={() => saveAs(format)}
+                style={{
+                  fontSize: 11,
+                  padding: "3px 10px",
+                  borderRadius: 4,
+                  border: `1px solid hsl(${hue} 30% 78%)`,
+                  background: "#fff",
+                  color: `hsl(${hue} 40% 38%)`,
+                  cursor: "pointer",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                {format}
+              </button>
+            ))}
+          </span>
         </div>
 
-        <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+        <div style={{ overflowX: "auto", paddingBottom: 8 }} ref={chartRef}>
           <NineGridChart
             data={DEMO_ROWS}
             groupKey="fruitType"

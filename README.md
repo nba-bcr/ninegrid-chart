@@ -170,6 +170,36 @@ const rows = [
 />
 ```
 
+### 画像エクスポート（PNG / JPG / SVG）
+
+`exportImage()` にチャートを包んだ要素を渡すと、見た目そのままの画像をダウンロードできる。
+スタイルが全部インラインなので、html2canvas のような外部ライブラリは不要。
+
+```jsx
+import { useRef } from "react";
+import { NineGridChart, exportImage } from "ninegrid-chart";
+
+const ref = useRef(null);
+
+<div ref={ref}>
+  <NineGridChart data={rows} ... />
+</div>
+<button onClick={() => exportImage(ref.current, { format: "png" })}>
+  PNGで保存
+</button>
+```
+
+| オプション | 既定値 | 説明 |
+|---|---|---|
+| `format` | `"png"` | `"png"` / `"jpg"` / `"svg"` |
+| `scale` | `2` | ラスタライズ倍率（png/jpg のみ） |
+| `background` | `"#ffffff"` | 背景色。`null` で透過（png/svg のみ） |
+| `fileName` | `"ninegrid-chart"` | 拡張子は自動で付く |
+
+フォントは閲覧環境のものが使われる（埋め込みはしない）。Safari は
+`foreignObject` の canvas 描画に既知の不具合があるため、PNG/JPG が
+欠ける場合は SVG を使うこと。
+
 ### メトリクスの自動集計
 
 `valueKey` 以外の**数値フィールドは自動で合算**される。さらに、
@@ -225,7 +255,7 @@ README 内での言及は、形式を説明するための記述に留めてい�
 
 - [ ] `mode="edit"` — セルを手で埋める編集モード（読みと書きで同じレンダリングを共有）
 - [ ] JSON エクスポート / インポート
-- [ ] PNG エクスポート
+- [x] 画像エクスポート（PNG / JPG / SVG）→ `exportImage()`
 - [ ] 進捗トグル（未着手 / 進行中 / 完了）と塗り分け
 - [ ] TypeScript 型定義
 - [ ] AI によるセル候補提案（別パッケージとして分離予定）
