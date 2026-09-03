@@ -2,6 +2,7 @@ name: publish
 on:
   release:
     types: [published]
+  workflow_dispatch:        # 失敗時に Release を作り直さず再実行できるように
 
 jobs:
   publish:
@@ -11,15 +12,17 @@ jobs:
       id-token: write        # OIDC に必須
     steps:
       - uses: actions/checkout@v4
-      # registry-url を指定すると setup-node が .npmrc にダミーの
-      # NODE_AUTH_TOKEN を書き込み、それが OIDC より優先されて 404 になる。
-      # Trusted Publishing では registry-url を付けないこと
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          registry-url: https://registry.npmjs.org
       # Trusted Publishing（OIDC 認証）は npm 11.5.1 以降が必要
       - run: npm install -g npm@latest
       - run: npm --version
       - run: npm ci
       - run: npm run build
-      - run: npm publish --provenance --access public
+      # setup-node が .npmrc に書くダミーの NODE_AUTH_TOKEN を空にしておかないと、
+      # そちらが OIDC より優先されて 404 になる
+      - run: npm publish --provenance --access public --loglevel verbose
+        env:
+          NODE_AUTH_TOKEN: ""
