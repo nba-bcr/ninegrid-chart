@@ -15,6 +15,10 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      # Trusted Publishing（OIDC 認証）は npm 11.5.1 以降が必要。
+      # Node 22 に同梱の npm 10 系では認証されず PUT が 404 になる
+      - run: npm install -g npm@latest
+      - run: npm --version
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
