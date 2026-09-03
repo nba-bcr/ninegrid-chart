@@ -11,12 +11,13 @@ jobs:
       id-token: write        # OIDC に必須
     steps:
       - uses: actions/checkout@v4
+      # registry-url を指定すると setup-node が .npmrc にダミーの
+      # NODE_AUTH_TOKEN を書き込み、それが OIDC より優先されて 404 になる。
+      # Trusted Publishing では registry-url を付けないこと
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
-      # Trusted Publishing（OIDC 認証）は npm 11.5.1 以降が必要。
-      # Node 22 に同梱の npm 10 系では認証されず PUT が 404 になる
+      # Trusted Publishing（OIDC 認証）は npm 11.5.1 以降が必要
       - run: npm install -g npm@latest
       - run: npm --version
       - run: npm ci
