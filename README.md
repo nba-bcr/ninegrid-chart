@@ -229,6 +229,7 @@ const ref = useRef(null);
 | `defaultGroupKey` | `string \| null` | `categoryKeys[0]` | 初期の中央8マス（第1階層） |
 | `defaultItemKey` | `string \| null` | `categoryKeys[1]` | 初期の外枠8マス（第2階層） |
 | `defaultBlockGrid` | `number` | `3` | 初期のグリッド（3 または 5） |
+| `defaultColorScale` | `string` | `"absolute"` | 初期の色スケール。UIのチップで切り替えられる |
 | `showControls` | `boolean` | `true` | カテゴリ選択・年フィルター・グリッド切替のUIを出すか |
 | `maxItems` | `number` | `8` | ブロック内セル数の上限 |
 | `centerLabel` / `valueLabel` / `hue` / `format` / `otherLabel` / `otherStrategy` | | | `<NineGridChart>` と同じ意味でそのまま渡る |
@@ -256,6 +257,7 @@ const ref = useRef(null);
 | `centerLabel` | `string` | `"総計"` | 中心セルのラベル |
 | `valueLabel` | `string` | `"値"` | ツールチップでの値の見出し |
 | `hue` | `number` | `258` | 色相（0–360）。彩度・明度は値から自動 |
+| `colorScale` | `"absolute"\|"share"\|"rank"\|"log"` | `"absolute"` | 色の濃さを何で決めるか（下記） |
 | `seriesKey` | `string \| null` | `null` | スパークラインに使う数値配列のキー |
 | `seriesLabels` | `string[] \| null` | `null` | スパークラインの目盛ラベル |
 | `metricLabels` | `object` | `{}` | ツールチップに出す指標 `{ キー: 表示名 }` |
@@ -263,6 +265,26 @@ const ref = useRef(null);
 | `format` | `(n) => string` | `toLocaleString` | 値の書式 |
 | `onCellClick` | `(node, level, context) => void \| null` | `null` | セルクリック時のコールバック。`context.group` はクリックしたセルが属するブロックのグループ名（中心ブロックなら `null`）、`context.isOtherGroup` は「その他」ブロックかどうか |
 | `minWidth` | `number` | `560` | 最小幅（下回ると横スクロール） |
+
+### `colorScale` の使い分け
+
+売上のようなロングテールのデータは、最大値で線形に正規化すると
+**上位1件だけが濃くて残りが全部ほぼ白**になり、構造が読めなくなる。
+何を基準に濃さを決めるかを選べる。
+
+| 値 | 基準 | 向いている場面 |
+|---|---|---|
+| `absolute`（実数） | 全体の最大値 | 値そのものの大きさを正直に見せたい |
+| `share`（比率） | **ブロック内**の最大値 | 各ブロックの内訳構造を読みたい。規模の違うブロックを横並びで比較できる |
+| `rank`（順位） | 順位で均等配色 | **値が偏っていても必ず差が出る。**一番読みやすい |
+| `log`（対数） | 対数空間の最小〜最大 | 桁違いの値が混ざるとき |
+
+例えば1カテゴリが全体の7割を占めるデータでは、`absolute` だと残り7ブロックが
+ほぼ白一色になる。`rank` にすると濃淡が均等に割り振られ、どのブロックでも
+「そのブロックの中で何が大きいか」が読める。
+
+`<NineGridDashboard>` では「色」のチップでいつでも切り替えられるので、
+まず `rank` で構造を掴んでから `absolute` で実際の差を確認する、という使い方が早い。
 
 ### `otherStrategy` の使い分け
 

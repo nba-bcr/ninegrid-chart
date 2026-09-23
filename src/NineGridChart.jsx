@@ -16,6 +16,42 @@ function shade(t, hue) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 濃度スケール
+ *
+ * 売上のようなロングテールのデータを最大値で線形に正規化すると、
+ * 上位1件だけが濃くて残りが全部ほぼ白になり、構造が読めなくなる。
+ * そこで「何を基準に濃さを決めるか」を colorScale で選べるようにしてある。
+ *
+ *   "absolute" … 全体の最大値で正規化（既定。全体の中での大きさが分かる）
+ *   "share"    … ブロック内の最大値で正規化（各ブロックの内訳構造が読める）
+ *   "rank"     … 順位で均等に配色（値の偏りに関係なく必ず差が出る）
+ *   "log"      … 対数スケール（桁違いの値が混ざるとき）
+ * ------------------------------------------------------------------ */
+function makeIntensity(values, scale) {
+  const clean = values.filter((v) => Number.isFinite(v));
+  const max = Math.max(1, ...clean);
+
+  if (scale === "rank") {
+    // 同値は同じ濃さになるよう、ユニークな値の順位で配る
+    const uniq = [...new Set(clean)].sort((a, b) => b - a);
+    const span = Math.max(1, uniq.length - 1);
+    const byValue = new Map(uniq.map((v, i) => [v, 1 - i / span]));
+    return (v) => byValue.get(v) ?? 0;
+  }
+
+  if (scale === "log") {
+    // 最大値だけで割ると桁が近い値は全部濃くなるので、対数空間の最小〜最大で伸ばす
+    const positives = clean.filter((v) => v > 0);
+    const lo = Math.log1p(Math.min(...positives, max));
+    const hi = Math.log1p(max);
+    const span = hi - lo || 1;
+    return (v) => (v > 0 ? Math.min(1, Math.max(0, (Math.log1p(v) - lo) / span)) : 0);
+  }
+
+  return (v) => v / max;
+}
+
+/* ------------------------------------------------------------------ *
  * セル
  * ------------------------------------------------------------------ */
 function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick, dense }) {
@@ -267,6 +303,7 @@ export function NineGridChart({
   otherLabel = "その他",
   otherStrategy = "merge",
   sortGroups = "value",
+  colorScale = "absolute",
   centerLabel = "総計",
   valueLabel = "値",
   hue = 258,
@@ -304,14 +341,19 @@ export function NineGridChart({
     [model, centerLabel, blockGrid, centerOverride]
   );
 
-  // 強度の分母。item と group で別スケールにしないと外周が真っ白になる。
-  const maxItemValue = useMemo(
-    () => Math.max(1, ...model.groups.flatMap((g) => g.children.map((c) => c.value))),
-    [model]
+  // 濃度。item と group を別スケールにしないと外周が真っ白になる。
+  // "share" / "rank" のときは、item だけブロック単位で計算し直す（下の描画部）。
+  const groupIntensity = useMemo(
+    () => makeIntensity(model.groups.map((g) => g.value), colorScale),
+    [model, colorScale]
   );
-  const maxGroupValue = useMemo(
-    () => Math.max(1, ...model.groups.map((g) => g.value)),
-    [model]
+  const itemIntensity = useMemo(
+    () =>
+      makeIntensity(
+        model.groups.flatMap((g) => g.children.map((c) => c.value)),
+        colorScale === "share" ? "absolute" : colorScale
+      ),
+    [model, colorScale]
   );
 
   const handleEnter = useCallback((node, level, e) => {
@@ -353,6 +395,14 @@ export function NineGridChart({
           const highlighted = Boolean(
             highlightGroups && block.group && highlightGroups.includes(block.group.name)
           );
+          // ブロック内で相対比較するモードは、そのブロックの値だけで正規化する
+          const blockItemIntensity =
+            colorScale === "share" || colorScale === "rank"
+              ? makeIntensity(
+                  block.cells.filter((c, i) => c && block.levels[i] === "item").map((c) => c.value),
+                  colorScale === "share" ? "absolute" : "rank"
+                )
+              : itemIntensity;
           return (
             <div
               key={bi}
@@ -367,9 +417,8 @@ export function NineGridChart({
             >
               {block.cells.map((node, ci) => {
                 const level = block.levels[ci];
-                const denom = level === "item" ? maxItemValue : maxGroupValue;
-                const intensity =
-                  level === "total" ? 1 : node ? node.value / denom : 0;
+                const scaleFor = level === "item" ? blockItemIntensity : groupIntensity;
+                const intensity = level === "total" ? 1 : node ? scaleFor(node.value) : 0;
                 return (
                   <Cell
                     key={ci}

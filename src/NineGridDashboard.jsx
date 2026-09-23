@@ -13,6 +13,14 @@ import { prepareRows, byYear } from "./prepare.js";
 const MONTHS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 const TOTAL = { groups: null, item: null, otherItems: false, label: null };
 
+/** 色の濃さを何で決めるか。ロングテールのデータは "absolute" だと差が出ない。 */
+const COLOR_SCALES = [
+  ["absolute", "実数", "全体の最大値を基準にする。値そのものの大きさが分かる"],
+  ["share", "比率", "ブロック内の最大値を基準にする。各ブロックの内訳が読める"],
+  ["rank", "順位", "順位で均等に配色する。値が偏っていても必ず差が出る"],
+  ["log", "対数", "対数スケール。桁違いの値が混ざるとき"],
+];
+
 /** 値の降順で上位 n 件の名前を Set で返す。 */
 function topNames(rows, key, n) {
   const totals = new Map();
@@ -96,6 +104,7 @@ export function NineGridDashboard({
   defaultGroupKey = null,
   defaultItemKey = null,
   defaultBlockGrid = 3,
+  defaultColorScale = "absolute",
   maxItems = 8,
   otherLabel = "その他",
   otherStrategy = "merge",
@@ -114,6 +123,7 @@ export function NineGridDashboard({
   const [groupKey, setGroupKey] = useState(defaultGroupKey || keys[0]);
   const [itemKey, setItemKey] = useState(defaultItemKey || keys[1] || keys[0]);
   const [blockGrid, setBlockGrid] = useState(defaultBlockGrid);
+  const [colorScale, setColorScale] = useState(defaultColorScale);
   const [excludedYears, setExcludedYears] = useState([]);
   const [selection, setSelection] = useState(TOTAL);
 
@@ -295,6 +305,20 @@ export function NineGridDashboard({
             ))}
           </span>
 
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ color: "hsl(40 5% 48%)" }}>色</span>
+            {COLOR_SCALES.map(([value, label, hint]) => (
+              <button
+                key={value}
+                title={hint}
+                onClick={() => setColorScale(value)}
+                style={chip(colorScale === value)}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+
           {years.length > 1 && (
             <span style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
               <span style={{ color: "hsl(40 5% 48%)", marginRight: 2 }}>年</span>
@@ -325,6 +349,7 @@ export function NineGridDashboard({
           levelLabels={{ group: labelOf(groupKey), item: labelOf(itemKey) }}
           format={format}
           hue={hue}
+          colorScale={colorScale}
           onCellClick={handleCellClick}
           minWidth={blockGrid > 3 ? 900 : 560}
         />
