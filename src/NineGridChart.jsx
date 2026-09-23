@@ -18,43 +18,29 @@ function shade(t, hue) {
 /* ------------------------------------------------------------------ *
  * 濃度スケール
  *
- * 売上のようなロングテールのデータを最大値で線形に正規化すると、
+ * 売上のようなロングテールのデータを全体の最大値で正規化すると、
  * 上位1件だけが濃くて残りが全部ほぼ白になり、構造が読めなくなる。
- * そこで「何を基準に濃さを決めるか」を colorScale で選べるようにしてある。
+ * 何を基準に濃さを決めるかを colorScale で選べるようにしてある。
  *
- *   "absolute" … 全体の最大値で正規化（既定。全体の中での大きさが分かる）
- *   "share"    … ブロック内の最大値で正規化（各ブロックの内訳構造が読める）
- *   "rank"     … 順位で均等に配色（値の偏りに関係なく必ず差が出る）
- *   "log"      … 対数スケール（桁違いの値が混ざるとき）
+ *   "absolute" … 全体の最大値で正規化（既定。値そのものの大きさに忠実）
+ *   "share"    … そのブロック内の最大値で正規化し、セルには構成比(%)を出す
  * ------------------------------------------------------------------ */
-function makeIntensity(values, scale) {
-  const clean = values.filter((v) => Number.isFinite(v));
-  const max = Math.max(1, ...clean);
-
-  if (scale === "rank") {
-    // 同値は同じ濃さになるよう、ユニークな値の順位で配る
-    const uniq = [...new Set(clean)].sort((a, b) => b - a);
-    const span = Math.max(1, uniq.length - 1);
-    const byValue = new Map(uniq.map((v, i) => [v, 1 - i / span]));
-    return (v) => byValue.get(v) ?? 0;
-  }
-
-  if (scale === "log") {
-    // 最大値だけで割ると桁が近い値は全部濃くなるので、対数空間の最小〜最大で伸ばす
-    const positives = clean.filter((v) => v > 0);
-    const lo = Math.log1p(Math.min(...positives, max));
-    const hi = Math.log1p(max);
-    const span = hi - lo || 1;
-    return (v) => (v > 0 ? Math.min(1, Math.max(0, (Math.log1p(v) - lo) / span)) : 0);
-  }
-
+function makeIntensity(values) {
+  const max = Math.max(1, ...values.filter((v) => Number.isFinite(v)));
   return (v) => v / max;
+}
+
+/** 構成比の表示。0.6321 → "63.2%" */
+function formatShare(share) {
+  if (!Number.isFinite(share)) return "–";
+  const pct = share * 100;
+  return (pct >= 99.95 ? "100" : pct.toFixed(1)) + "%";
 }
 
 /* ------------------------------------------------------------------ *
  * セル
  * ------------------------------------------------------------------ */
-function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick, dense }) {
+function Cell({ node, level, intensity, hue, format, display, share, onEnter, onLeave, onClick, dense }) {
   if (!node) {
     return (
       <div
@@ -77,10 +63,10 @@ function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick, 
       role={clickable ? "button" : "figure"}
       tabIndex={0}
       aria-label={`${node.name} ${format(node.value)}`}
-      onMouseEnter={(e) => onEnter(node, level, e)}
-      onMouseMove={(e) => onEnter(node, level, e)}
+      onMouseEnter={(e) => onEnter(node, level, e, share)}
+      onMouseMove={(e) => onEnter(node, level, e, share)}
       onMouseLeave={onLeave}
-      onFocus={(e) => onEnter(node, level, e)}
+      onFocus={(e) => onEnter(node, level, e, share)}
       onBlur={onLeave}
       onClick={clickable ? () => onClick(node, level) : undefined}
       onKeyDown={
@@ -134,7 +120,7 @@ function Cell({ node, level, intensity, hue, format, onEnter, onLeave, onClick, 
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {format(node.value)}
+          {display ?? format(node.value)}
         </span>
       )}
     </div>
@@ -194,7 +180,7 @@ const LEVEL_LABEL = { total: "総計", group: "グループ", item: "アイテ�
 function Tooltip({ hovered, hue, format, valueLabel, seriesKey, seriesLabels, metricLabels, levelLabels }) {
   if (!hovered) return null;
 
-  const { node, level, x, y, containerWidth } = hovered;
+  const { node, level, x, y, containerWidth, share } = hovered;
   const metrics = node.metrics || {};
   const series = seriesKey && Array.isArray(metrics[seriesKey]) ? metrics[seriesKey] : null;
 
@@ -256,6 +242,22 @@ function Tooltip({ hovered, hue, format, valueLabel, seriesKey, seriesLabels, me
           {format(node.value)}
         </span>
       </div>
+
+      {share != null && level !== "total" && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: 11.5,
+            padding: "3px 0",
+          }}
+        >
+          <span style={{ color: "hsl(40 5% 52%)" }}>
+            {level === "item" ? "ブロック内の構成比" : "全体の構成比"}
+          </span>
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatShare(share)}</span>
+        </div>
+      )}
 
       {rows.map(([label, v]) => (
         <div
@@ -344,19 +346,16 @@ export function NineGridChart({
   // 濃度。item と group を別スケールにしないと外周が真っ白になる。
   // "share" / "rank" のときは、item だけブロック単位で計算し直す（下の描画部）。
   const groupIntensity = useMemo(
-    () => makeIntensity(model.groups.map((g) => g.value), colorScale),
-    [model, colorScale]
+    () => makeIntensity(model.groups.map((g) => g.value)),
+    [model]
   );
   const itemIntensity = useMemo(
-    () =>
-      makeIntensity(
-        model.groups.flatMap((g) => g.children.map((c) => c.value)),
-        colorScale === "share" ? "absolute" : colorScale
-      ),
-    [model, colorScale]
+    () => makeIntensity(model.groups.flatMap((g) => g.children.map((c) => c.value))),
+    [model]
   );
+  const isShare = colorScale === "share";
 
-  const handleEnter = useCallback((node, level, e) => {
+  const handleEnter = useCallback((node, level, e, share = null) => {
     const rect = wrapRef.current?.getBoundingClientRect();
     if (!rect) return;
     // FocusEvent には clientX/clientY がないので、セルの中心にフォールバックする
@@ -370,6 +369,7 @@ export function NineGridChart({
     setHovered({
       node,
       level,
+      share,
       x: cx - rect.left,
       y: cy - rect.top,
       containerWidth: rect.width,
@@ -395,14 +395,12 @@ export function NineGridChart({
           const highlighted = Boolean(
             highlightGroups && block.group && highlightGroups.includes(block.group.name)
           );
-          // ブロック内で相対比較するモードは、そのブロックの値だけで正規化する
-          const blockItemIntensity =
-            colorScale === "share" || colorScale === "rank"
-              ? makeIntensity(
-                  block.cells.filter((c, i) => c && block.levels[i] === "item").map((c) => c.value),
-                  colorScale === "share" ? "absolute" : "rank"
-                )
-              : itemIntensity;
+          // 比率モードは、そのブロック内の値だけで正規化して構成比を出す
+          const blockItems = block.cells.filter((c, i) => c && block.levels[i] === "item");
+          const blockItemIntensity = isShare
+            ? makeIntensity(blockItems.map((c) => c.value))
+            : itemIntensity;
+          const blockTotal = blockItems.reduce((sum, c) => sum + c.value, 0);
           return (
             <div
               key={bi}
@@ -419,6 +417,14 @@ export function NineGridChart({
                 const level = block.levels[ci];
                 const scaleFor = level === "item" ? blockItemIntensity : groupIntensity;
                 const intensity = level === "total" ? 1 : node ? scaleFor(node.value) : 0;
+                // 構成比の分母: アイテムはそのブロック、グループ・総計は全体
+                const share = !node
+                  ? null
+                  : level === "total"
+                    ? 1
+                    : level === "item"
+                      ? blockTotal ? node.value / blockTotal : 0
+                      : model.total ? node.value / model.total : 0;
                 return (
                   <Cell
                     key={ci}
@@ -427,6 +433,8 @@ export function NineGridChart({
                     intensity={intensity}
                     hue={hue}
                     format={format}
+                    display={isShare ? formatShare(share) : undefined}
+                    share={share}
                     dense={dense}
                     onEnter={handleEnter}
                     onLeave={handleLeave}
