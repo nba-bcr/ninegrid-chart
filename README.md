@@ -20,6 +20,13 @@
 配置は**値の降順**。左上が最大で、読み順（左上→右下）に並ぶ
 （`sortGroups="none"` にすればデータの出現順＝任意の並びにもできる）。
 
+## 2つのコンポーネント
+
+| | 何をするか | 使いどころ |
+|---|---|---|
+| **`<NineGridDashboard>`** | 4列データを渡すだけ。カテゴリ選択・年フィルター・3×3 / 5×5 切替・マンダラ本体・**下に年別の月次グラフ**まで一式を描く | まずはこちら。数行で動く |
+| **`<NineGridChart>`** | 配置と描画だけを担う素のチャート | 見た目や操作を自分で組み立てたいとき |
+
 ## 見た目の構成
 
 - **ブロックの並びは `blockGrid` で変えられる。** 既定は `3`（3×3 = 9ブロック、81マス）。
@@ -71,33 +78,28 @@ BI ツールやスプレッドシートから CSV で吐き出すときはこの
 
 事前の集計は不要。同じ「大カテゴリ × 小カテゴリ」の行が何行あっても勝手に合算される。
 
-チャートに渡すときは、年月の列を**月別の12要素配列**に畳んでおくと、
-ツールチップに季節性のスパークラインが出る。変換はこれだけ：
+この形のまま `<NineGridDashboard>` に渡せば、年月の分解・月別の畳み込み・
+年フィルター・ドリルダウンまで全部やってくれる。**前処理のコードは要らない。**
 
-```js
-// CSVの行 { ym: "2025-01", group: "ドリンク", item: "カフェラテ", value: 128000 }
-// を { group, item, value, monthly: [12個] } に畳む
-function toChartRows(csvRows) {
-  const acc = new Map();
-  for (const r of csvRows) {
-    const key = r.group + "\u0000" + r.item;
-    if (!acc.has(key)) {
-      acc.set(key, { group: r.group, item: r.item, value: 0, monthly: Array(12).fill(0) });
-    }
-    const node = acc.get(key);
-    node.value += r.value;
-    node.monthly[Number(r.ym.slice(5, 7)) - 1] += r.value;
-  }
-  return [...acc.values()];
-}
+```jsx
+import { NineGridDashboard } from "ninegrid-chart";
+
+<NineGridDashboard
+  data={rows}                                   // 上の表そのまま
+  ymKey="年月"
+  valueKey="指標"
+  categoryKeys={["大カテゴリ", "小カテゴリ"]}    // 中央8マス / 外枠8マスに使える列
+  format={(v) => "¥" + v.toLocaleString()}
+/>
 ```
 
-複数年のデータなら `(group, item, 年)` 単位で畳んで年ごとの行にしておくと、
-年フィルターや「各年の月次比較」のような UI をチャートの外側に足しやすい
-（チャート自体は年の列を無視してそのまま合算してくれる）。
+カテゴリ列は3つ以上渡してもよく、どれを中央8マス（第1階層）・
+外枠8マス（第2階層）に使うかは、描画されるセレクタで利用者が切り替えられる。
+「店舗×担当者」で見たあと「担当者×店舗」に入れ替える、といった操作が
+コードを書かずにできる。
 
 年月がそもそも無いデータ（スナップショット1回分）なら、
-`monthly` を省いて `{ group, item, value }` の3列だけでいい。
+素の `<NineGridChart>` に `{ group, item, value }` の3列を渡せばいい。
 
 ## セットアップ（ローカルで動かす）
 
@@ -115,8 +117,9 @@ npm run build
 npm run build:demo
 ```
 
-`npm run dev` で立ち上がるデモには、タイプ数・品種数・色相・はみ出し戦略を
-その場で変えられるスライダーが付いている。挙動を確かめるのはここが一番早い。
+`npm run dev` で立ち上がるデモは `<NineGridDashboard>` に4列のダミーデータを
+渡しただけのもの。カテゴリの入れ替え・年フィルター・3×3 / 5×5 切替・
+クリックでの年別ドリルダウン・画像保存がひと通り試せる。
 
 ### Cloudflare Pages に出す場合
 
@@ -125,7 +128,7 @@ GitHub と連携して以下を設定するだけ。
 - Build command: `npm run build:demo`
 - Build output directory: `dist-demo`
 
-## 使い方
+## 使い方（素の `<NineGridChart>`）
 
 ```jsx
 import { NineGridChart } from "ninegrid-chart";
@@ -213,6 +216,28 @@ const ref = useRef(null);
 宣言しなかった数値は集計されるが表示されない。
 
 ## Props
+
+### `<NineGridDashboard>`
+
+| Prop | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `data` | `object[]` | 必須 | 「年月・カテゴリ・指標」のフラットな行データ |
+| `ymKey` | `string` | `"ym"` | 年月の列名。`"2025-01"` / `"2025/1"` / `"2025-01-15"` / `Date` を解釈する |
+| `valueKey` | `string` | `"value"` | 指標の列名 |
+| `categoryKeys` | `string[]` | 年月・指標以外の全列 | 階層に使える列。2つ以上渡すとセレクタで選べる |
+| `categoryLabels` | `object` | `{}` | 列名の表示名 `{ 列名: "表示名" }` |
+| `defaultGroupKey` | `string \| null` | `categoryKeys[0]` | 初期の中央8マス（第1階層） |
+| `defaultItemKey` | `string \| null` | `categoryKeys[1]` | 初期の外枠8マス（第2階層） |
+| `defaultBlockGrid` | `number` | `3` | 初期のグリッド（3 または 5） |
+| `showControls` | `boolean` | `true` | カテゴリ選択・年フィルター・グリッド切替のUIを出すか |
+| `maxItems` | `number` | `8` | ブロック内セル数の上限 |
+| `centerLabel` / `valueLabel` / `hue` / `format` / `otherLabel` / `otherStrategy` | | | `<NineGridChart>` と同じ意味でそのまま渡る |
+| `onCellClick` | `(node, level, context) => void \| null` | `null` | 内部の年別グラフ切替に加えて呼ばれる |
+
+下に並ぶ年別カードは、クリックしたマスの範囲（総計 / グループ / アイテム / その他）に
+追従して切り替わる。各カードは12ヶ月分のバーで、月にカーソルを合わせると値が出る。
+
+### `<NineGridChart>`
 
 | Prop | 型 | 既定値 | 説明 |
 |---|---|---|---|
